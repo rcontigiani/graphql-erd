@@ -1,9 +1,9 @@
-import lineReader from "line-reader";
 import figlet from "figlet";
 import erd from "erd";
+import fs from "fs";
+import { parse } from "graphql";
 
 const schemaJson = {};
-let currentModel = null;
 
 // Functions
 const initMessage = () => {
@@ -23,77 +23,86 @@ const initMessage = () => {
 
 const readOriginalSchema = () => {
   console.log("📄 Reading File...");
+  try {
+    var schema = fs.readFileSync("./schema.graphql").toString("utf-8");
+    const parsedDocument = parse(schema);
 
-  lineReader.eachLine("schema.graphql", function (line, last) {
-    try {
-      const regexTypeModel = /(type)(\s{1})(\w*)/g;
-      const modelTypeResult = regexTypeModel.exec(line);
+    const definitions = parsedDocument.definitions;
 
-      const regexSimpleField = /(\w*)(\:\s{1})(\S*)/g;
-      const simpleFieldResult = regexSimpleField.exec(line);
+    definitions.forEach((definition) => {
+      const modelName = definition?.name?.value;
+      const fields = definition.fields;
+      schemaJson[modelName] = [];
 
-      const regexMandatory = /(\S*!)/g;
-      const regexNCardinality = /(\[\S*\])/g;
+      fields.forEach((field) => {
+        const fieldName = field?.name?.value;
 
-      if (modelTypeResult) {
-        currentModel = modelTypeResult[3];
-        schemaJson[currentModel] = { keys: [] };
-      } else if (simpleFieldResult) {
-        const fieldName = simpleFieldResult[1];
-        let type = simpleFieldResult[3];
-        const cardinality = type.match(regexNCardinality) ? "N" : "1";
-        const mandatory = type.match(regexMandatory) ? true : false;
+        const standardFielType = field?.type?.name?.value;
+        const complexFieldType = field?.type?.type?.name?.value;
 
-        type = type.replace("!", "").replace("[", "").replace("]", "");
+        const fieldType = standardFielType || complexFieldType;
 
         const item = {
           fieldName: fieldName,
-          type: type,
-          cardinality: cardinality,
-          mandatory: mandatory,
+          type: fieldType,
         };
-        schemaJson[currentModel]?.keys?.push(item);
-      }
+        schemaJson[modelName]?.push(item);
+      });
+    });
+    console.log("📄 File Reading Completed!");
 
-      if (last) doWork();
-    } catch (e) {
-      console.error("error", e);
-    }
-  });
-
-  console.log("📄 File Reading Completed!");
+    doWork();
+  } catch (e) {
+    console.log(`❌ Error Occurred - ${e.message}`);
+  }
 };
 
 const doWork = () => {
-  const keys = Object.keys(schemaJson);
+  try {
+    console.log("🛠 Generating Structure Started!");
 
-  let entity = "";
-  let relations = "";
+    const keys = Object.keys(schemaJson);
 
-  keys.forEach((key) => {
-    const value = schemaJson[key]?.keys;
+    let entity = "";
+    let relations = "";
 
-    entity = `${entity}\n[${key}]`;
+    keys.forEach((key) => {
+      const value = schemaJson[key];
 
-    value.forEach((i) => {
-      entity = `${entity}\n${i.fieldName} [${i.type}]`;
+      entity = `${entity}\n[${key}]`;
 
-      const relation = keys.find((k) => k === i.type);
+      value.forEach((i) => {
+        entity = `${entity}\n${i.fieldName} [${i.type}]`;
 
-      if (relation) relations = `${relations}\n${key} *--* ${relation}`;
+        const relation = keys.find((k) => k === i.type);
+
+        if (relation) relations = `${relations}\n${key} *--* ${relation}`;
+      });
+
+      entity = `${entity}\n`;
     });
 
-    entity = `${entity}\n`;
-  });
+    const modelsText = `# Entities${entity}\n# Relationships${relations}`;
+    console.log("🛠 Generating Structure Completed!");
 
-  const modelsText = `# Entities${entity}\n# Relationships${relations}`;
-  generateErd(modelsText);
+    generateErd(modelsText);
+  } catch (e) {
+    console.log(`❌ Error Occurred - ${e.message}`);
+  }
 };
 
 const generateErd = (modelsText) => {
-  const outputType = "pdf";
+  try {
+    console.log("🖨 Generating Output Starting!");
 
-  erd({ modelsText, outputType });
+    const outputType = "pdf";
+
+    erd({ modelsText, outputType });
+
+    console.log("🖨 Generating Output Completed!");
+  } catch (e) {
+    console.log(`❌ Error Occurred - ${e.message}`);
+  }
 };
 
 const main = () => {
