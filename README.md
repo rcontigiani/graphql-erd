@@ -21,6 +21,6 @@ npm install
 npm start
 ```
 
-##Result
+## Result
 
 -  💥 The process generates `erd.pdf` as output file with the ERD of input schema.
